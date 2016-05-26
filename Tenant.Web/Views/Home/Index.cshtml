@@ -1,0 +1,7 @@
+﻿@{
+    ViewBag.Title = "Home Page";
+    var tenantName = System.Configuration.ConfigurationManager.AppSettings["TenantName"];
+}
+<div class="jumbotron">
+    <h1>Hello @tenantName</h1>
+</div>

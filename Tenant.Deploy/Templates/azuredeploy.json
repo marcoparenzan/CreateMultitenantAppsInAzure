@@ -1,0 +1,145 @@
+﻿{
+  "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "TenantName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "_artifactsLocation": {
+      "type": "string"
+    },
+    "_artifactsLocationSasToken": {
+      "type": "securestring"
+    }
+  },
+  "resources": [
+    {
+      "name": "myaccountant",
+      "type": "Microsoft.Sql/servers",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2014-04-01-preview",
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "MyAccountant Sql Server"
+      },
+      "resources": [
+        {
+          "name": "AllowAllWindowsAzureIps",
+          "type": "firewallrules",
+          "location": "[resourceGroup().location]",
+          "apiVersion": "2014-04-01-preview",
+          "dependsOn": [
+            "Microsoft.Sql/servers/myaccountant"
+          ],
+          "properties": {
+            "startIpAddress": "0.0.0.0",
+            "endIpAddress": "0.0.0.0"
+          }
+        },
+        {
+          "name": "[variables('TenantSqlDbName')]",
+          "type": "databases",
+          "location": "[resourceGroup().location]",
+          "apiVersion": "2014-04-01-preview",
+          "dependsOn": [
+            "Microsoft.Sql/servers/myaccountant"
+          ],
+
+          "tags": {
+            "displayName": "Tenant Sql Database"
+          },
+          "properties": {
+            "collation": "[concat('SQL_Latin1_General_CP1_CI_AS')]",
+            "edition": "Basic",
+            "maxSizeBytes": "1073741824"
+          }
+        }
+      ]
+    },
+    {
+      "name": "MyAccountant",
+      "type": "Microsoft.Web/serverfarms",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2014-06-01",
+      "dependsOn": [ ],
+      "tags": {
+        "displayName": "MyAccountant"
+      },
+      "properties": {
+        "name": "MyAccountant",
+        "sku": "Standard",
+        "workerSize": "Small",
+        "numberOfWorkers": 1
+      },
+      "resources": [
+        {
+          "name": "[variables('TenantWebAppName')]",
+          "type": "Microsoft.Web/sites",
+          "location": "[resourceGroup().location]",
+          "apiVersion": "2015-08-01",
+          "dependsOn": [
+            "[resourceId('Microsoft.Web/serverfarms/', 'MyAccountant')]"
+          ],
+          "tags": {
+            "[concat('hidden-related:', resourceGroup().id, '/providers/Microsoft.Web/serverfarms/MyAccountant')]": "Resource",
+            "displayName": "Tenant Web App"
+          },
+          "properties": {
+            "name": "[variables('TenantWebAppName')]",
+            "serverFarmId": "[resourceId('Microsoft.Web/serverfarms/', 'MyAccountant')]",
+            "siteConfig": {
+              "connectionStrings": [
+                {
+                  "Name": "InvoicesModel",
+                  "ConnectionString": "[concat('Server=tcp:myaccountant.database.windows.net,1433;Data Source=myaccountant.database.windows.net;Initial Catalog=', variables('TenantSqlDbName'), ';Persist Security Info=False;User ID={your_username};Password={your_password};Pooling=False;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;')]",
+                  "Type": "Sql Database"
+                  
+                }
+              ]
+            }
+          },
+          "resources": [
+            {
+              "name": "appsettings",
+              "type": "config",
+              "apiVersion": "2015-08-01",
+              "dependsOn": [
+                "[concat('Microsoft.Web/sites/', variables('TenantWebAppName'))]"
+              ],
+              "tags": {
+                "displayName": "WebAppSettings"
+              },
+              "properties": {
+                "TenantName": "[parameters('TenantName')]"
+              }
+            },
+            {
+              "name": "MSDeploy",
+              "type": "extensions",
+              "location": "[resourceGroup().location]",
+              "apiVersion": "2015-08-01",
+              "dependsOn": [
+                "[concat('Microsoft.Web/sites/', variables('TenantWebAppName'))]"
+              ],
+              "tags": {
+                "displayName": "TenantWebAppDeploy"
+              },
+              "properties": {
+                "packageUri": "[concat(parameters('_artifactsLocation'), '/Tenant.Web/package.zip', parameters('_artifactsLocationSasToken'))]",
+                "dbType": "None",
+                "setParameters": {
+                  "IIS Web Application Name": "[variables('TenantWebAppName')]"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "TenantWebAppName": "[concat('myaccountant-', parameters('TenantName'))]",
+    "TenantSqlDbName": "[concat(parameters('TenantName'))]"
+  }
+}
